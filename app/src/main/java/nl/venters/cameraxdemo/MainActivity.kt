@@ -22,9 +22,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         cameraHelper = CameraHelper(
-                owner = this,
-                context = this.applicationContext,
-                viewFinder = binding.cameraView, onResult = ::onResult
+            owner = this,
+            context = this.applicationContext,
+            viewFinder = binding.cameraView,
+            onResult = ::onResult
         )
 
         cameraHelper.start()
@@ -35,7 +36,11 @@ class MainActivity : AppCompatActivity() {
         binding.textResult.text = result
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
         cameraHelper.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
