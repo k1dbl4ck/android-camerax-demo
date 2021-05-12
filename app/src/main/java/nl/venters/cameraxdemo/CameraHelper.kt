@@ -2,7 +2,6 @@ package nl.venters.cameraxdemo
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.DisplayMetrics
@@ -21,11 +20,13 @@ import com.google.mlkit.vision.common.InputImage
 import nl.venters.cameraxdemo.MainActivity.Companion.TAG
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.abs
+import kotlin.math.max
 
 typealias BarcodeListener = (barcode: String?) -> Unit
 
 class CameraHelper(
-    private val owner: Activity,
+    private val owner: AppCompatActivity,
     private val context: Context,
     private val viewFinder: PreviewView,
     private val onResult: (result: String) -> Unit
@@ -34,8 +35,6 @@ class CameraHelper(
     private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
     private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
-    private var preview: Preview? = null
-    private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
 
@@ -69,65 +68,83 @@ class CameraHelper(
 
     private fun bindCameraUseCases() {
 
-        val metrics = DisplayMetrics().also { viewFinder.display.getRealMetrics(it) }
-        val screenAspectRatio = aspectRatio(metrics.widthPixels, metrics.heightPixels)
+        val cameraProvider = cameraProvider ?: throw IllegalStateException("Camera initialization failed.")
 
-        val rotation = viewFinder.display.rotation
-        val cameraProvider = cameraProvider
-            ?: throw IllegalStateException("Camera initialization failed.")
         val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
-
-        preview = Preview.Builder()
-            .setTargetAspectRatio(screenAspectRatio)
-            .setTargetRotation(rotation)
-            .build()
-
-        imageAnalyzer = ImageAnalysis.Builder()
-            .setTargetAspectRatio(screenAspectRatio)
-            .setTargetRotation(rotation)
-            .build()
-            .also { it ->
-                it.setAnalyzer(cameraExecutor, BarcodeScanner { string ->
-                    string?.let { url ->
-                        onResult(url)
-                    }
-                })
-            }
+        val previewView = getPreviewUseCase()
+        val barcodeRecognizer = getBarcodeAnalyzerUseCase(onResult)
 
         cameraProvider.unbindAll()
 
         try {
             camera = cameraProvider.bindToLifecycle(
-                owner as AppCompatActivity, cameraSelector, preview, imageAnalyzer)
-            preview?.setSurfaceProvider(viewFinder.surfaceProvider)
+                owner,
+                cameraSelector,
+                previewView,
+                barcodeRecognizer
+            )
+
+            previewView.setSurfaceProvider(viewFinder.surfaceProvider)
+
         } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed $exc")
         }
     }
 
-    private fun aspectRatio(width: Int, height: Int): Int {
-
-        return AspectRatio.RATIO_16_9
-
+    private fun aspectRatio(): Int {
+        with(DisplayMetrics().also { viewFinder.display.getRealMetrics(it) }) {
+            val previewRatio = max(widthPixels, heightPixels).toDouble() / widthPixels.coerceAtMost(
+                heightPixels
+            )
+            if (abs(previewRatio - RATIO_4_3_VALUE) <= abs(previewRatio - RATIO_16_9_VALUE)) {
+                return AspectRatio.RATIO_4_3
+            }
+            return AspectRatio.RATIO_16_9
+        }
     }
 
-    private fun hasBackCamera(): Boolean {
-        return cameraProvider?.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) ?: false
+    private fun hasBackCamera() =
+        cameraProvider?.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) ?: false
+
+    private fun hasFrontCamera() =
+        cameraProvider?.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) ?: false
+
+    private fun getPreviewUseCase(): Preview {
+        return Preview.Builder()
+            .setTargetAspectRatio(aspectRatio())
+            .setTargetRotation(viewFinder.display.rotation)
+            .build()
     }
 
-    private fun hasFrontCamera(): Boolean {
-        return cameraProvider?.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) ?: false
+    private fun getBarcodeAnalyzerUseCase(onResult: (result: String) -> Unit): ImageAnalysis {
+        val analyzer = ImageAnalysis.Builder()
+            .setTargetAspectRatio(aspectRatio())
+            .setTargetRotation(viewFinder.display.rotation)
+            .build()
+
+        analyzer.setAnalyzer(cameraExecutor, BarcodeScanner { string ->
+            string?.let { url ->
+                onResult(url)
+            }
+        })
+
+        return analyzer
     }
 
-
-    fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+    fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
                 startCamera()
             } else {
-                Toast.makeText(context,
+                Toast.makeText(
+                    context,
                     "Permissions not granted by the user.",
-                    Toast.LENGTH_SHORT).show()
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -135,7 +152,9 @@ class CameraHelper(
     private fun allPermissionsGranted(): Boolean {
         for (permission in REQUIRED_PERMISSIONS) {
             if (ContextCompat.checkSelfPermission(
-                    context, permission) != PackageManager.PERMISSION_GRANTED) {
+                    context, permission
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
                 return false
             }
         }
@@ -153,7 +172,8 @@ class CameraHelper(
         override fun analyze(imageProxy: ImageProxy) {
             val mediaImage = imageProxy.image
             if (mediaImage != null) {
-                val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                val image =
+                    InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
                 val scanner = BarcodeScanning.getClient(options)
                 scanner.process(image)
                     .addOnSuccessListener { barcodes ->
@@ -172,6 +192,8 @@ class CameraHelper(
     companion object {
         const val REQUEST_CODE_PERMISSIONS = 42
         val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
+        private const val RATIO_4_3_VALUE = 4.0 / 3.0
+        private const val RATIO_16_9_VALUE = 16.0 / 9.0
     }
 
 }

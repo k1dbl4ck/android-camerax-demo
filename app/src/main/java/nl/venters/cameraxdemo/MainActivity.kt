@@ -21,12 +21,13 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(LayoutInflater.from(this))
         setContentView(binding.root)
 
-        CameraHelper(
+        cameraHelper = CameraHelper(
                 owner = this,
                 context = this.applicationContext,
                 viewFinder = binding.cameraView, onResult = ::onResult
-        ).start()
+        )
 
+        cameraHelper.start()
     }
 
     private fun onResult(result: String) {
