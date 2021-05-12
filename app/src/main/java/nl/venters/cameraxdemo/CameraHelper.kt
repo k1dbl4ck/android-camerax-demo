@@ -131,6 +131,34 @@ class CameraHelper(
         return analyzer
     }
 
+    private class BarcodeScanner(listener: BarcodeListener? = null) : ImageAnalysis.Analyzer {
+        private val listeners = ArrayList<BarcodeListener>().apply { listener?.let { add(it) } }
+
+        val options = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
+            .build()
+
+        @SuppressLint("UnsafeExperimentalUsageError")
+        override fun analyze(imageProxy: ImageProxy) {
+            val mediaImage = imageProxy.image
+            if (mediaImage != null) {
+                val image =
+                    InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                val scanner = BarcodeScanning.getClient(options)
+                scanner.process(image)
+                    .addOnSuccessListener { barcodes ->
+                        barcodes.forEach { barcode ->
+                            listeners.forEach { it(barcode.displayValue) }
+                        }
+                        imageProxy.close()
+                    }
+                    .addOnFailureListener {
+                        imageProxy.close()
+                    }
+            }
+        }
+    }
+
     fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String>,
@@ -159,34 +187,6 @@ class CameraHelper(
             }
         }
         return true
-    }
-
-    private class BarcodeScanner(listener: BarcodeListener? = null) : ImageAnalysis.Analyzer {
-        private val listeners = ArrayList<BarcodeListener>().apply { listener?.let { add(it) } }
-
-        val options = BarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
-            .build()
-
-        @SuppressLint("UnsafeExperimentalUsageError")
-        override fun analyze(imageProxy: ImageProxy) {
-            val mediaImage = imageProxy.image
-            if (mediaImage != null) {
-                val image =
-                    InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                val scanner = BarcodeScanning.getClient(options)
-                scanner.process(image)
-                    .addOnSuccessListener { barcodes ->
-                        barcodes.forEach { barcode ->
-                            listeners.forEach { it(barcode.displayValue) }
-                        }
-                        imageProxy.close()
-                    }
-                    .addOnFailureListener {
-                        imageProxy.close()
-                    }
-            }
-        }
     }
 
     companion object {
