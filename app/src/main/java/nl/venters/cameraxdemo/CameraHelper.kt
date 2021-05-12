@@ -9,6 +9,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
+import androidx.camera.core.impl.ImageAnalysisConfig
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
@@ -120,6 +121,8 @@ class CameraHelper(
         val analyzer = ImageAnalysis.Builder()
             .setTargetAspectRatio(aspectRatio())
             .setTargetRotation(viewFinder.display.rotation)
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setImageQueueDepth(10)
             .build()
 
         analyzer.setAnalyzer(cameraExecutor, BarcodeScanner { string ->
